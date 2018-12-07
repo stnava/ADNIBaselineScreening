@@ -1,0 +1,72 @@
+---
+title: "ADNI ABeta from baseline"
+author: "Brian B. Avants et al."
+date: "12/7/2018"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+library( ADNIMERGE )
+library( rtemis )
+library( randomForest )
+library( ANTsR )
+library( caret )
+wdx = 'all'
+wdx = 'CN'
+wdx = 'AD'
+wdx = '!AD'
+wdx = 'MCI'
+if ( wdx == 'CN' | wdx == 'AD')
+  mydx = adnimerge$DX.bl == wdx
+if ( wdx == 'MCI')
+  mydx = adnimerge$DX.bl == 'EMCI' | adnimerge$DX.bl == 'LMCI'
+if ( wdx == 'all')
+    mydx = !is.na(adnimerge$DX.bl)
+if ( wdx == '!AD')
+    mydx = adnimerge$DX.bl != 'AD' & adnimerge$DX.bl != 'LMCI'
+mysel = adnimerge$VISCODE == 'bl' & !is.na( adnimerge$AV45.bl ) & mydx # & !is.na(adnimerge$Hippocampus.bl)
+myd = adnimerge[ mysel, ]
+myd$APOE4 = factor( myd$APOE4 )
+myd$CDRSB.bl = antsrimpute( myd$CDRSB.bl )
+myd$AGE = antsrimpute( myd$AGE )
+myd$MMSE.bl = antsrimpute( myd$MMSE.bl )
+myd$ICV.bl = antsrimpute( myd$ICV.bl )
+myd$APOE4 = antsrimpute( myd$APOE4, FUN=median )
+myd$PTGENDER = antsrimpute( myd$PTGENDER, FUN=median )
+myd$DX.bl = antsrimpute( myd$DX.bl, FUN=median )
+myd$AV45.bl = antsrimpute( myd$AV45.bl, FUN=median )
+myd$AGE2 = myd$AGE^2
+mdl = ( lm( AV45.bl ~ AGE*APOE4+ APOE4*PTGENDER+MMSE.bl + CDRSB.bl  ,  data=myd ) )
+pred = predict( mdl )
+print( summary( mdl ) )
+ttl = paste( 'SUVR fit from common data:', wdx )
+lims=c(0.9,2)
+mplot3.fit( myd$AV45.bl, pred, main=ttl, xlab='Real', ylab='Predicted'  , theme='lightbox', fit.legend=F, fit='lm', rsq=0.5,
+  xlim=lims, ylim=lims)
+
+```
+
+
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+
+pander::pander( summary( mdl )) 
+
+```
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+suvrGT = myd$AV45.bl >= 1.11
+suvrP = pred >= 1.11
+suvrGT[ suvrGT == FALSE ] = 'AB-'
+suvrGT[ suvrGT == TRUE ] = 'AB+'
+suvrP[ suvrP == FALSE ] = 'AB-'
+suvrP[ suvrP == TRUE ] = 'AB+'
+xtab <- table( suvrGT, suvrP  )
+cm<-caret::confusionMatrix(xtab)
+ttl = paste( 'SUVR dx - ', wdx, '/ Accuracy:', round(cm$overall*100), "%" )
+mplot3.conf(cm, main=ttl)
+```
+
